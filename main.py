@@ -1,6 +1,9 @@
 from datetime import date, datetime
 from abc import ABC, abstractmethod
 from openpyxl import Workbook
+from openpyxl.styles import (Font,PatternFill,Border,Side,Alignment)
+from openpyxl.utils import get_column_letter
+import os
 
 ### CLASE ABSTRACTA REPORTEGASTOS
 
@@ -44,7 +47,7 @@ class Categoria:
 
 
 class Proveedor:
-    def __init__(self, nombre, contacto, RUC=str):
+    def __init__(self, nombre, contacto, RUC):
         self._nombre = nombre
         self._contacto = contacto
         self._RUC = RUC
@@ -146,6 +149,24 @@ class Administrador(Usuario):
     def privilegios(self):
         return self._privilegios
 
+    def registrar_area(self, sistema, area):
+        sistema.agregar_area(area)
+        print(
+            f"Área '{area.nombre}' registrada correctamente."
+        )
+
+    def registrar_categoria(self, sistema, categoria):
+        sistema.agregar_categoria(categoria)
+        print(
+            f"Categoría '{categoria.nombre}' registrada correctamente."
+        )
+
+    def registrar_proveedor(self, sistema, proveedor):
+        sistema.agregar_proveedor(proveedor)
+        print(
+            f"Proveedor '{proveedor.nombre}' registrado correctamente."
+        )
+
 # CLASE GERENTE
 class Gerente(Usuario):
     def __init__(self, nombre, dni, email, departamento):
@@ -161,6 +182,28 @@ class Gerente(Usuario):
     @property
     def departamento(self):
         return self._departamento
+    
+    def ver_total_empresa(self, sistema):
+        total = sistema.calcular_gasto_total_general()
+        print(
+            f"Total general de la empresa: "
+            f"S/ {total:.2f}"
+        )
+
+    def generar_reporte_general(self, sistema):
+        print("\n===== REPORTE GENERAL =====")
+        if len(sistema.gastos) == 0:
+            print("No existen gastos registrados.")
+            return
+
+        total = 0
+        for gasto in sistema.gastos:
+            print(gasto)
+            total += gasto.calcular_total()
+        print(
+            f"\nTOTAL GENERAL: "
+            f"S/ {total:.2f}"
+        )
 
 ### CLASE GASTO Y SUS HIJAS (POR DEPARTAMENTO)
 
@@ -461,10 +504,11 @@ class SistemaGastos:
 
         return True
     
-    def exportar_gastos_excel(self, nombre_archivo="reporte_gastos.xlsx"):
+    def exportar_gastos_excel(self,nombre_archivo="reporte_gastos.xlsx"):
         workbook = Workbook()
         hoja = workbook.active
         hoja.title = "Reporte Gastos"
+
         encabezados = [
             "Fecha",
             "Tipo",
@@ -477,22 +521,132 @@ class SistemaGastos:
         ]
 
         hoja.append(encabezados)
-        for gasto in self._gastos:
 
-            fila = [
-                str(gasto.fecha),
-                gasto.obtener_tipo(),
-                gasto.area.nombre,
-                gasto.categoria.nombre,
-                gasto.proveedor.nombre,
-                gasto.usuario.nombre,
-                gasto.concepto,
-                gasto.calcular_total()
-            ]
+        # ===== ESTILOS =====
 
-            hoja.append(fila)
+        color_encabezado = PatternFill(
+            start_color="1F4E78",
+            end_color="1F4E78",
+            fill_type="solid"
+        )
 
-        workbook.save(nombre_archivo)
+        fuente_encabezado = Font(
+            bold=True,
+            color="FFFFFF",
+            size=11
+        )
+
+        borde = Border(
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin")
+        )
+
+        alineacion = Alignment(
+            horizontal="center",
+            vertical="center"
+        )
+
+        # ===== ESTILO CABECERA =====
+
+        for columna in range(1, len(encabezados) + 1):
+
+            celda = hoja.cell(
+                row=1,
+                column=columna
+            )
+
+            celda.fill = color_encabezado
+            celda.font = fuente_encabezado
+            celda.border = borde
+            celda.alignment = alineacion
+
+        # ===== DATOS =====
+
+        if len(self._gastos) == 0:
+            print("No existen gastos registrados.")
+            hoja.append(["No existen gastos registrados"])
+            hoja.merge_cells("A2:H2")
+            celda_mensaje = hoja["A2"]
+            celda_mensaje.alignment = Alignment(
+                horizontal="center",
+                vertical="center"
+            )
+            celda_mensaje.font = Font(
+                bold=True,
+                italic=True
+            )
+        else:
+            for gasto in self._gastos:
+
+                fila = [
+                    str(gasto.fecha),
+                    gasto.obtener_tipo(),
+                    gasto.area.nombre,
+                    gasto.categoria.nombre,
+                    gasto.proveedor.nombre,
+                    gasto.usuario.nombre,
+                    gasto.concepto,
+                    gasto.calcular_total()
+                ]
+
+                hoja.append(fila)
+
+        # ===== ESTILO FILAS =====
+
+        for fila in hoja.iter_rows(
+            min_row=2,
+            max_row=hoja.max_row
+        ):
+
+            for celda in fila:
+                celda.border = borde
+                celda.alignment = Alignment(
+                    horizontal="center"
+                )
+                if celda.column == 8 and celda.row > 1:
+                    celda.number_format = '"S/" #,##0.00'
+
+        # ===== AJUSTAR ANCHO =====
+
+        for columna in hoja.columns:
+
+            max_length = 0
+
+            columna_letra = get_column_letter(
+                columna[0].column
+            )
+
+            for celda in columna:
+
+                try:
+
+                    if len(str(celda.value)) > max_length:
+
+                        max_length = len(
+                            str(celda.value)
+                        )
+
+                except Exception:
+                    pass
+
+            ancho_ajustado = max_length + 5
+
+            hoja.column_dimensions[
+                columna_letra
+            ].width = ancho_ajustado
+
+        # ===== RUTA DESCARGAS =====
+        carpeta_descargas = os.path.join(os.path.expanduser("~"),"Downloads")
+        ruta_completa = os.path.join(carpeta_descargas,nombre_archivo)
+
+        # ===== GUARDAR =====
+        workbook.save(ruta_completa)
+        print(f"\nExcel exportado en:\n{ruta_completa}")
+
+        # ===== ABRIR EXCEL =====
+        os.startfile(ruta_completa)
 
 ## CLASES DE REPORTE DE GASTOS
 
@@ -730,6 +884,66 @@ def pedir_opcion_menu(mensaje: str, minimo: int, maximo: int):
 def cancelar_registro():
     print("Registro cancelado. Volviendo al menú principal...")
 
+def login(sistema):
+    print("\n===== INICIO DE SESIÓN =====")
+
+    while True:
+        print("\n0. Salir del sistema")
+        correo = input("Correo: ")
+        if correo == "0":
+            print("Saliendo del sistema...")
+            return None
+        usuario_encontrado = None
+
+        for usuario in sistema.usuarios:
+            if usuario.email.lower() == correo.lower():
+                usuario_encontrado = usuario
+                break
+
+        if usuario_encontrado is not None:
+            print(
+                f"\nBienvenido "
+                f"{usuario_encontrado.nombre}"
+            )
+            print(
+                f"Rol: "
+                f"{usuario_encontrado.rol}"
+            )
+            return usuario_encontrado
+        print("Usuario no encontrado.")
+
+def menu_empleado():
+    print("\n======= MENÚ EMPLEADO =======")
+    print("1. Registrar gasto")
+    print("2. Listar gastos")
+    print("3. Buscar gastos por área")
+    print("4. Buscar gastos por categoría")
+    print("5. Buscar gastos por proveedor")
+    print("6. Buscar gastos por fecha")
+    print("7. Exportar reporte Excel")
+    print("8. Cerrar sesión")
+
+def menu_admin():
+    print("\n===== MENÚ ADMINISTRADOR =====")
+    print("1. Registrar gasto")
+    print("2. Listar gastos")
+    print("3. Buscar gastos por área")
+    print("4. Buscar gastos por categoría")
+    print("5. Buscar gastos por proveedor")
+    print("6. Buscar gastos por fecha")
+    print("7. Registrar área")
+    print("8. Registrar categoría")
+    print("9. Registrar proveedor")
+    print("10. Exportar reporte Excel")
+    print("11. Cerrar sesión")
+
+def menu_gerente():
+    print("\n======== MENÚ GERENTE ========")
+    print("1. Ver total general")
+    print("2. Ver presupuesto")
+    print("3. Exportar reporte Excel")
+    print("4. Generar reporte general")
+    print("5. Cerrar sesión")
 
 def registrar_gasto_menu(sistema):
     print("\n--- REGISTRAR GASTO ---")
@@ -806,7 +1020,7 @@ def registrar_gasto_menu(sistema):
     while True:
         print("\nPROVEEDORES DISPONIBLES:")
         for proveedor in sistema.proveedores:
-            print("-", proveedor.nombre, " RUC :", proveedor._RUC)
+            print("-", proveedor.nombre, " RUC :", proveedor.RUC)
 
         nombre_proveedor = pedir_texto("Ingrese proveedor: ")
         if nombre_proveedor is None:
@@ -820,7 +1034,32 @@ def registrar_gasto_menu(sistema):
         else:
             break
 
-    usuario = sistema.usuarios[0]
+    print("\nUSUARIOS DISPONIBLES:")
+
+    for usuario_item in sistema.usuarios:
+        print("-", usuario_item.nombre)
+
+    while True:
+
+        nombre_usuario = pedir_texto(
+            "Ingrese usuario: "
+        )
+
+        if nombre_usuario is None:
+            cancelar_registro()
+            return
+
+        usuario = None
+
+        for usuario_item in sistema.usuarios:
+            if usuario_item.nombre.lower() == nombre_usuario.lower():
+                usuario = usuario_item
+                break
+
+        if usuario is None:
+            print("Usuario no encontrado.")
+        else:
+            break
 
     print("\nTIPO DE GASTO:")
     print("1. Marketing")
@@ -1056,68 +1295,141 @@ def exportar_excel_menu(sistema):
             error
         )
 
+
+
+def main():
+    sistema = SistemaGastos()
+
+    area_marketing = Area("Marketing")
+    area_administracion = Area("Administración")
+    area_logistica = Area("Logística")
+
+    categoria_publicidad = Categoria("Publicidad")
+    categoria_servicios = Categoria("Servicios")
+    categoria_transporte = Categoria("Transporte")
+
+    proveedor_1 = Proveedor("Proveedor Dental SAC", "contacto@proveedor.com", "20601234567")
+
+    usuario_1 = Empleado("Ángel Navarro", "74859621", "angel@empresa.com", area_marketing)
+    usuario_2 = Empleado("Alessandro Flores","75234128","alessandro@empresa.com",area_administracion)
+    usuario_3 = Empleado("Lucía Ramírez","70125698","lucia@empresa.com",area_logistica)
+    usuario_4 = Empleado("Carlos Mendoza","71478521","carlos@empresa.com",area_marketing)
+    admin_1 = Administrador("Javier Huisa","73093925","jhuisa@empresa.com","Control total")
+    gerente_1 = Gerente("Alejandra Dávila","70111222","adavila@empresa.com","Gerencia General")
+
+    presupuesto_marketing = Presupuesto("Marketing", 5000, date(2026, 5, 1), date(2026, 5, 31))
+    presupuesto_administracion = Presupuesto("Administración", 3000, date(2026, 5, 1), date(2026, 5, 31))
+    presupuesto_logistica = Presupuesto("Logística", 4000, date(2026, 5, 1), date(2026, 5, 31))
+
+    sistema.agregar_area(area_marketing)
+    sistema.agregar_area(area_administracion)
+    sistema.agregar_area(area_logistica)
+
+    sistema.agregar_categoria(categoria_publicidad)
+    sistema.agregar_categoria(categoria_servicios)
+    sistema.agregar_categoria(categoria_transporte)
+
+    sistema.agregar_proveedor(proveedor_1)
+
+    sistema.agregar_usuario(usuario_1)
+    sistema.agregar_usuario(usuario_2)
+    sistema.agregar_usuario(usuario_3)
+    sistema.agregar_usuario(usuario_4)
+    sistema.agregar_usuario(admin_1)
+    sistema.agregar_usuario(gerente_1)
+
+    sistema.agregar_presupuesto(presupuesto_marketing)
+    sistema.agregar_presupuesto(presupuesto_administracion)
+    sistema.agregar_presupuesto(presupuesto_logistica)
+
+    ejecutar_menu(sistema)
+
 def ejecutar_menu(sistema):
     while True:
-        mostrar_menu()
-        opcion = pedir_opcion()
-
-        if opcion == 1:
-            registrar_gasto_menu(sistema)
-        elif opcion == 2:
-            listar_gastos_menu(sistema)
-        elif opcion == 3:
-            buscar_gastos_por_area_menu(sistema)
-        elif opcion == 4:
-            buscar_gastos_por_categoria_menu(sistema)
-        elif opcion == 5:
-            buscar_gastos_por_proveedor_menu(sistema)
-        elif opcion == 6:
-            buscar_gastos_por_fecha_menu(sistema)
-        elif opcion == 7:
-            ver_total_general_menu(sistema)
-        elif opcion == 8:
-            ver_presupuesto_menu(sistema)
-        elif opcion == 9:
-            exportar_excel_menu(sistema)
-        elif opcion == 10:
-            print("Saliendo del sistema...")
+        usuario = login(sistema)
+        if usuario is None:
             break
-        else:
-            print("Opción no válida.")
+        while True:
+            if usuario.rol == "Empleado":
+                menu_empleado()
+                opcion = input("Seleccione una opción: ")
+
+                if opcion == "1":
+                    registrar_gasto_menu(sistema)
+                elif opcion == "2":
+                    listar_gastos_menu(sistema)
+                elif opcion == "3":
+                    buscar_gastos_por_area_menu(sistema)
+                elif opcion == "4":
+                    buscar_gastos_por_categoria_menu(sistema)
+                elif opcion == "5":
+                    buscar_gastos_por_proveedor_menu(sistema)
+                elif opcion == "6":
+                    buscar_gastos_por_fecha_menu(sistema)
+                elif opcion == "7":
+                    exportar_excel_menu(sistema)
+                elif opcion == "8":
+                    print("Cerrando sesión...")
+                    break
+                else:
+                    print("Opción inválida.")
+
+            elif usuario.rol == "Administrador":
+                menu_admin()
+                opcion = input("Seleccione una opción: ")
+
+                if opcion == "1":
+                    registrar_gasto_menu(sistema)
+                elif opcion == "2":
+                    listar_gastos_menu(sistema)
+                elif opcion == "3":
+                    buscar_gastos_por_area_menu(sistema)
+                elif opcion == "4":
+                    buscar_gastos_por_categoria_menu(sistema)
+                elif opcion == "5":
+                    buscar_gastos_por_proveedor_menu(sistema)
+                elif opcion == "6":
+                    buscar_gastos_por_fecha_menu(sistema)
+                elif opcion == "7":
+                    nombre = input("Nombre del área: ")
+                    area = Area(nombre)
+                    usuario.registrar_area(sistema,area)
+                elif opcion == "8":
+                    nombre = input("Nombre categoría: ")
+                    categoria = Categoria(nombre)
+                    usuario.registrar_categoria(sistema,categoria)
+                elif opcion == "9":
+                    nombre = input("Nombre proveedor: ")
+                    contacto = input("Contacto: ")
+                    ruc = input("RUC: ")
+                    proveedor = Proveedor(nombre,contacto,ruc)
+                    usuario.registrar_proveedor(sistema,proveedor)
+                elif opcion == "10":
+                    exportar_excel_menu(sistema)
+                elif opcion == "11":
+                    print("Cerrando sesión...")
+                    break
+                else:
+                    print("Opción inválida.")
+
+            elif usuario.rol == "Gerente":
+                menu_gerente()
+                opcion = input("Seleccione una opción: ")
+                if opcion == "1":
+                    usuario.ver_total_empresa(sistema)
+                elif opcion == "2":
+                    ver_presupuesto_menu(sistema)
+                elif opcion == "3":
+                    exportar_excel_menu(sistema)
+                elif opcion == "4":
+                    usuario.generar_reporte_general(sistema)
+                elif opcion == "5":
+                    print("Cerrando sesión...")
+                    break
+                else:
+                    print("Opción inválida.")
 
 
-sistema = SistemaGastos()
-
-area_marketing = Area("Marketing")
-area_administracion = Area("Administración")
-area_logistica = Area("Logística")
-
-categoria_publicidad = Categoria("Publicidad")
-categoria_servicios = Categoria("Servicios")
-categoria_transporte = Categoria("Transporte")
-
-proveedor_1 = Proveedor("Proveedor Dental SAC", "contacto@proveedor.com")
-
-usuario_1 = Empleado("Ángel Navarro", "74859621", "angel@empresa.com", area_marketing)
-
-presupuesto_marketing = Presupuesto("Marketing", 5000, date(2026, 5, 1), date(2026, 5, 31))
-presupuesto_administracion = Presupuesto("Administración", 3000, date(2026, 5, 1), date(2026, 5, 31))
-presupuesto_logistica = Presupuesto("Logística", 4000, date(2026, 5, 1), date(2026, 5, 31))
-
-sistema.agregar_area(area_marketing)
-sistema.agregar_area(area_administracion)
-sistema.agregar_area(area_logistica)
-
-sistema.agregar_categoria(categoria_publicidad)
-sistema.agregar_categoria(categoria_servicios)
-sistema.agregar_categoria(categoria_transporte)
-
-sistema.agregar_proveedor(proveedor_1)
-
-sistema.agregar_usuario(usuario_1)
-
-sistema.agregar_presupuesto(presupuesto_marketing)
-sistema.agregar_presupuesto(presupuesto_administracion)
-sistema.agregar_presupuesto(presupuesto_logistica)
-
-ejecutar_menu(sistema)
+if __name__ == "__main__":
+    main()
+    
