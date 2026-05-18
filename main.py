@@ -78,25 +78,51 @@ class Proveedor:
 
 
 class Usuario:
-    def __init__(self, nombre, email):
+    def __init__(self, nombre, dni, email, rol):
+
         self._nombre = nombre
+        self._dni = dni
         self._email = email
+        self._rol = rol
 
     @property
     def nombre(self):
         return self._nombre
 
     @property
+    def dni(self):
+        return self._dni
+
+    @property
     def email(self):
         return self._email
+
+    @property
+    def rol(self):
+        return self._rol
+
+    def __str__(self):
+
+        return (
+            f"{self.nombre} | "
+            f"DNI: {self.dni} | "
+            f"Correo: {self.email} | "
+            f"Rol: {self.rol}"
+        )
 
 ### CLASES HIJAS DE USUSRARIO
 
 # CLASE EMPLEADO
 
 class Empleado(Usuario):
-    def __init__(self, nombre, email, area):
-        super().__init__(nombre, email)
+    def __init__(self, nombre, dni, email, area):
+
+        super().__init__(
+            nombre,
+            dni,
+            email,
+            "Empleado"
+        )
         self._area = area
 
     @property
@@ -106,8 +132,14 @@ class Empleado(Usuario):
 # CLASE ADMINISTRADOR
 
 class Administrador(Usuario):
-    def __init__(self, nombre, email, privilegios):
-        super().__init__(nombre, email)
+    def __init__(self, nombre, dni, email, privilegios):
+
+        super().__init__(
+            nombre,
+            dni,
+            email,
+            "Administrador"
+        )
         self._privilegios = privilegios
 
     @property
@@ -116,8 +148,14 @@ class Administrador(Usuario):
 
 # CLASE GERENTE
 class Gerente(Usuario):
-    def __init__(self, nombre, email, departamento):
-        super().__init__(nombre, email)
+    def __init__(self, nombre, dni, email, departamento):
+
+        super().__init__(
+            nombre,
+            dni,
+            email,
+            "Gerente"
+        )
         self._departamento = departamento
 
     @property
@@ -1060,7 +1098,7 @@ categoria_transporte = Categoria("Transporte")
 
 proveedor_1 = Proveedor("Proveedor Dental SAC", "contacto@proveedor.com")
 
-usuario_1 = Empleado("Ángel Navarro", "angel@empresa.com", area_marketing)
+usuario_1 = Empleado("Ángel Navarro", "74859621", "angel@empresa.com", area_marketing)
 
 presupuesto_marketing = Presupuesto("Marketing", 5000, date(2026, 5, 1), date(2026, 5, 31))
 presupuesto_administracion = Presupuesto("Administración", 3000, date(2026, 5, 1), date(2026, 5, 31))
